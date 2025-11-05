@@ -1,0 +1,7 @@
+snapshot:
+  url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/24/18.yaml
+
+extra-deps:
+  - brillo-1.13.3
+  - brillo-rendering-1.13.3
+  - apecs-brillo-0.1.0
