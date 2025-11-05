@@ -1,4 +1,4 @@
-module Game(runGame, collidesWith, collidesWithAny) where
+module Game(runGame, collision, collisionWithEverything) where
 
 import Apecs
 import Apecs.TH (makeWorld, makeMapComponents)
@@ -58,23 +58,37 @@ stepJumpCooldown dT = cmap $ \(JumpCooldown c) ->
     then Left $ Not @(JumpCooldown)
     else Right $ JumpCooldown $ c-dT
 
-collidesWith :: (Size, Position) -> (Size, Position) -> Bool
-collidesWith (Size (V2 boxSizeX boxSizeY), Position (V2 boxPosX boxPosY))
-             (Size (V2 plrSizeX plrSizeY), Position (V2 plrPosX plrPosY))
-  |    (abs (plrPosX - boxPosX)) * 2 < (plrSizeX + boxSizeX)
-    && (abs (plrPosY - boxPosY)) * 2 < (plrSizeY + boxSizeY) = True
-  |  otherwise                                               = False
+collision :: (Size, Position, Velocity) -> (Size, Position) -> (Size, Position, Velocity)
+collision (Size (V2 plrSizeX plrSizeY), Position (V2 plrPosX plrPosY), Velocity (V2 plrVelX plrVelY))
+          (Size (V2 boxSizeX boxSizeY), Position (V2 boxPosX boxPosY)) =
+  let 
+    dx = boxPosX - plrPosX
+    dy = boxPosY - plrPosY
+    overlapX = (plrSizeX / 2) + (boxSizeX / 2) - (abs dx)
+    overlapY = (plrSizeY / 2) + (boxSizeY / 2) - (abs dy)
+    (penVectorX, penVectorY) =
+      if overlapX < overlapY
+        then if | dx > 0    -> ((negate overlapX), 0)
+                | otherwise -> (overlapX, 0)
+        else if | dy > 0    -> (0, (negate overlapY))
+                | otherwise -> (0, overlapY)
+    length = (penVectorX ** 2 + penVectorY ** 2) / 2
+    normalX = penVectorX / length
+    normalY = penVectorY / length
+    dot = plrVelX * normalX + plrVelY * normalY
+  in
+    (Size $ V2 plrSizeX plrSizeY, Position $ V2 (plrPosX + overlapX) (plrPosY + overlapY),) $
+      if length /= 0
+         then Velocity $ V2 (plrVelX - dot * normalX) (plrVelY - dot * normalY)
+         else Velocity $ V2 plrVelX plrVelY
 
-collidesWithAny :: Float -> (Size, Position, Velocity) -> [(Size, Position)] -> Bool
-collidesWithAny dT (s, (Position p), (Velocity v)) = foldl (\acc target -> if acc then True else (s, Position (p + dT *^ v)) `collidesWith` target) False
+collisionWithEverything :: (Size, Position, Velocity) -> [(Size, Position)] -> (Size, Position, Velocity)
+collisionWithEverything = foldl (\acc target -> collision acc target)
 
 handleCollisions :: Float -> System' ()
 handleCollisions dT = do
   solids <- collect $ \(s, p, Solid) -> Just (s, p) :: Maybe (Size, Position)
-  cmap $ \(stuffs, v, Not @Solid) ->
-    if collidesWithAny dT stuffs solids
-       then Velocity 0
-       else v :: Velocity
+  cmap $ \(s, Not @Solid) -> collisionWithEverything s solids
 
 step :: Float -> System' ()
 step dT = do
