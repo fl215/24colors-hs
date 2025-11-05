@@ -24,7 +24,6 @@ initialize :: System' ()
 initialize = do
   playerEty <- newEntity (Player, Gravity, Position (V2 0 0), Velocity (V2 0 0), Size (V2 32 32))
   blockEty <- newEntity (Block, Solid, Position (V2 (-240) (-128)), Size (V2 128 32))
-  blockEty2 <- newEntity (Block, Solid, Position (V2 0 (-128)), Size (V2 128 32))
   return ()
 
 stepGravity :: Float -> System' ()
@@ -72,12 +71,12 @@ collision (Size (V2 plrSizeX plrSizeY), Position (V2 plrPosX plrPosY), Velocity 
                 | otherwise -> (overlapX, 0)
         else if | dy > 0    -> (0, (negate overlapY))
                 | otherwise -> (0, overlapY)
-    length = (penVectorX ** 2 + penVectorY ** 2) / 2
+    length = sqrt (penVectorX ^ 2 + penVectorY ^ 2)
     normalX = penVectorX / length
     normalY = penVectorY / length
     dot = plrVelX * normalX + plrVelY * normalY
   in
-    (Size $ V2 plrSizeX plrSizeY, Position $ V2 (plrPosX + overlapX) (plrPosY + overlapY),) $
+    (Size $ V2 plrSizeX plrSizeY, Position $ V2 (plrPosX + penVectorX) (plrPosY + penVectorY),) $
       if length /= 0
          then Velocity $ V2 (plrVelX - dot * normalX) (plrVelY - dot * normalY)
          else Velocity $ V2 plrVelX plrVelY
@@ -85,19 +84,19 @@ collision (Size (V2 plrSizeX plrSizeY), Position (V2 plrPosX plrPosY), Velocity 
 collisionWithEverything :: (Size, Position, Velocity) -> [(Size, Position)] -> (Size, Position, Velocity)
 collisionWithEverything = foldl (\acc target -> collision acc target)
 
-handleCollisions :: Float -> System' ()
-handleCollisions dT = do
+handleCollisions :: System' ()
+handleCollisions = do
   solids <- collect $ \(s, p, Solid) -> Just (s, p) :: Maybe (Size, Position)
   cmap $ \(s, Not @Solid) -> collisionWithEverything s solids
 
 step :: Float -> System' ()
 step dT = do
-  stepPosition dT
+  handleCollisions
   stepJumpCooldown dT
   stepGravity dT
   doMove
   doJump
-  handleCollisions dT
+  stepPosition dT
 
 handleEvent :: Event -> System' ()
 
